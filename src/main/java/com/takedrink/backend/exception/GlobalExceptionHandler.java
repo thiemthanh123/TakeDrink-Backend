@@ -132,4 +132,30 @@ public class GlobalExceptionHandler {
             .body(response);
   }
 
+  @ExceptionHandler(OrderNotFoundException.class)
+  public ResponseEntity<ApiResponse<Void>> handleOrderNotFound(
+          OrderNotFoundException exception
+  ) {
+    return ResponseEntity
+            .status(HttpStatus.NOT_FOUND)
+            .body(ApiResponse.error(exception.getMessage()));
+  }
+
+  @ExceptionHandler(AddressNotFoundException.class)
+  public ResponseEntity<ApiResponse<Void>> handleAddressNotFound(
+          AddressNotFoundException exception
+  ) {
+    return ResponseEntity
+            .status(HttpStatus.NOT_FOUND)
+            .body(ApiResponse.error(exception.getMessage()));
+  }
+
+  @ExceptionHandler(UserNotFoundException.class)
+  public ResponseEntity<ApiResponse<Void>> handleUserNotFound(
+          UserNotFoundException exception
+  ) {
+    return ResponseEntity
+            .status(HttpStatus.NOT_FOUND)
+            .body(ApiResponse.error(exception.getMessage()));
+  }
 }

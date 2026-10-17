@@ -1,26 +1,32 @@
+
 package com.takedrink.backend.config;
 
-import tools.jackson.databind.ObjectMapper;
 import com.takedrink.backend.dto.ApiResponse;
+import com.takedrink.backend.enums.Role;
 import com.takedrink.backend.security.JwtAuthenticationFilter;
 import com.takedrink.backend.security.JwtService;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
-import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 @Configuration
+@EnableMethodSecurity
 public class SecurityConfig {
 
   @Bean
@@ -28,7 +34,13 @@ public class SecurityConfig {
           HttpSecurity http,
           JwtService jwtService,
           UserDetailsService userDetailsService,
-          ObjectMapper objectMapper
+          ObjectMapper objectMapper,
+          @Qualifier("publicPostPaths") List<String> publicPostPaths,
+          @Qualifier("publicGetPaths") List<String> publicGetPaths,
+          @Qualifier("managerPostPaths") List<String> managerPostPaths,
+          @Qualifier("managerPutPaths") List<String> managerPutPaths,
+          @Qualifier("managerPatchPaths") List<String> managerPatchPaths,
+          @Qualifier("managerDeletePaths") List<String> managerDeletePaths
   ) throws Exception {
 
     JwtAuthenticationFilter jwtFilter =
@@ -73,53 +85,89 @@ public class SecurityConfig {
 
             .authorizeHttpRequests(auth -> auth
 
-                    // Public: đăng ký và đăng nhập
+                    // 1. All manager APIs: MANAGER only
+                    .requestMatchers("/api/manager/**")
+                    .hasRole(Role.MANAGER.name())
+
+                    // 2. Public: create orders
                     .requestMatchers(
                             HttpMethod.POST,
-                            "/api/auth/register",
-                            "/api/auth/login"
+                            "/api/orders"
                     ).permitAll()
 
-                    // Public: khách xem menu sản phẩm
-                    .requestMatchers(
-                            HttpMethod.GET,
-                            "/api/products",
-                            "/api/products/**"
-                    ).permitAll()
-
-                    // Public: xem danh mục
-                    .requestMatchers(
-                            HttpMethod.GET,
-                            "/api/categories",
-                            "/api/categories/**"
-                    ).permitAll()
-
-                    // Chỉ MANAGER được tạo, sửa, xóa sản phẩm
+                    // 3. Public: register and login
                     .requestMatchers(
                             HttpMethod.POST,
-                            "/api/products",
-                            "/api/products/**"
-                    ).hasRole("MANAGER")
+                            publicPostPaths.toArray(String[]::new)
+                    ).permitAll()
 
+                    // 4. Public: view products and categories
                     .requestMatchers(
-                            HttpMethod.PUT,
-                            "/api/products",
-                            "/api/products/**"
-                    ).hasRole("MANAGER")
+                            HttpMethod.GET,
+                            publicGetPaths.toArray(String[]::new)
+                    ).permitAll()
 
+                    // 5. CUSTOMER: view own orders
+                    .requestMatchers(
+                            HttpMethod.GET,
+                            "/api/orders/my-orders"
+                    ).hasRole(Role.CUSTOMER.name())
+
+                    // 6. STAFF and MANAGER: view orders
+                    .requestMatchers(
+                            HttpMethod.GET,
+                            "/api/orders"
+                    ).hasAnyRole(
+                            Role.STAFF.name(),
+                            Role.MANAGER.name()
+                    )
+
+                    // 7. STAFF and MANAGER: update order status
                     .requestMatchers(
                             HttpMethod.PATCH,
-                            "/api/products",
-                            "/api/products/**"
-                    ).hasRole("MANAGER")
+                            "/api/orders/*/status"
+                    ).hasAnyRole(
+                            Role.STAFF.name(),
+                            Role.MANAGER.name()
+                    )
 
+                    // 8. CUSTOMER: cancel own order
+                    .requestMatchers(
+                            HttpMethod.PATCH,
+                            "/api/orders/*/cancel"
+                    ).hasRole(Role.CUSTOMER.name())
+
+                    // 9. CUSTOMER: manage addresses
+                    .requestMatchers(
+                            "/api/addresses",
+                            "/api/addresses/**"
+                    ).hasRole(Role.CUSTOMER.name())
+
+                    // 10. MANAGER: create products
+                    .requestMatchers(
+                            HttpMethod.POST,
+                            managerPostPaths.toArray(String[]::new)
+                    ).hasRole(Role.MANAGER.name())
+
+                    // 11. MANAGER: update products
+                    .requestMatchers(
+                            HttpMethod.PUT,
+                            managerPutPaths.toArray(String[]::new)
+                    ).hasRole(Role.MANAGER.name())
+
+                    // 12. MANAGER: partially update products
+                    .requestMatchers(
+                            HttpMethod.PATCH,
+                            managerPatchPaths.toArray(String[]::new)
+                    ).hasRole(Role.MANAGER.name())
+
+                    // 13. MANAGER: delete products
                     .requestMatchers(
                             HttpMethod.DELETE,
-                            "/api/products",
-                            "/api/products/**"
-                    ).hasRole("MANAGER")
+                            managerDeletePaths.toArray(String[]::new)
+                    ).hasRole(Role.MANAGER.name())
 
-                    // Các API còn lại phải đăng nhập
+                    // 14. All remaining APIs require authentication
                     .anyRequest().authenticated()
             )
 

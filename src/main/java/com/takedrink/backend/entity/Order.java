@@ -1,5 +1,7 @@
+
 package com.takedrink.backend.entity;
 
+import com.takedrink.backend.enums.OrderStatus;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -46,8 +48,9 @@ public class Order extends BaseEntity {
   @Column(name = "delivery_address", length = 500)
   private String deliveryAddress;
 
+  @Enumerated(EnumType.STRING)
   @Column(name = "status", nullable = false, length = 30)
-  private String status = "PENDING";
+  private OrderStatus status = OrderStatus.PENDING;
 
   @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
   private BigDecimal totalAmount = BigDecimal.ZERO;

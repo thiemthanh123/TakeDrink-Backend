@@ -1,3 +1,4 @@
+
 package com.takedrink.backend.security;
 
 import io.jsonwebtoken.ExpiredJwtException;
@@ -17,6 +18,7 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.time.Instant;
 
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
@@ -56,16 +58,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
       return;
     }
 
-    // 2. Header không sử dụng Bearer authentication
+    // 2. Không sử dụng Bearer authentication
     if (!authorizationHeader.startsWith("Bearer ")) {
       log.debug("[JWT] Authorization scheme is not Bearer");
       filterChain.doFilter(request, response);
       return;
     }
 
+    // 3. Lấy JWT
     String token = authorizationHeader.substring(7).trim();
 
-    // 3. Token rỗng
     if (token.isEmpty()) {
       log.debug("[JWT] Token is empty");
       SecurityContextHolder.clearContext();
@@ -74,7 +76,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     try {
-      // 4. Đọc subject từ JWT
+      // 4. Đọc email từ JWT
       String email = jwtService.extractUsername(token);
 
       log.debug("[JWT] Token parsed successfully");
@@ -84,17 +86,25 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
               && SecurityContextHolder.getContext()
               .getAuthentication() == null) {
 
+        // 5. Tải thông tin tài khoản hiện tại từ database
         UserDetails userDetails =
                 userDetailsService.loadUserByUsername(email);
 
-        // 5. Kiểm tra tài khoản
-        if (!userDetails.isEnabled()) {
+        // 6. Kiểm tra JWT hợp lệ
+        if (!jwtService.isTokenValid(token, userDetails)) {
+          log.debug("[JWT] Token validation failed");
+          SecurityContextHolder.clearContext();
+
+          // 7. JWT hợp lệ nhưng tài khoản đã bị khóa
+        } else if (!userDetails.isEnabled()) {
           log.debug("[JWT] Account is disabled");
           SecurityContextHolder.clearContext();
 
-        } else if (jwtService.isTokenValid(token, userDetails)) {
+          writeUnauthorizedResponse(response);
+          return;
 
-          // 6. Xác thực thành công
+          // 8. JWT hợp lệ và tài khoản đang hoạt động
+        } else {
           UsernamePasswordAuthenticationToken authentication =
                   new UsernamePasswordAuthenticationToken(
                           userDetails,
@@ -114,10 +124,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                   "[JWT] Authentication successful; authorities={}",
                   userDetails.getAuthorities()
           );
-
-        } else {
-          log.debug("[JWT] Token validation failed");
-          SecurityContextHolder.clearContext();
         }
       }
 
@@ -139,5 +145,30 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     // Spring Security tiếp tục quyết định quyền truy cập
     filterChain.doFilter(request, response);
+  }
+
+  /**
+   * Trả về HTTP 401 khi tài khoản đã bị vô hiệu hóa.
+   * Không sử dụng ObjectMapper.
+   */
+  private void writeUnauthorizedResponse(
+          HttpServletResponse response
+  ) throws IOException {
+
+    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+    response.setContentType("application/json");
+    response.setCharacterEncoding("UTF-8");
+
+    String timestamp = Instant.now().toString();
+
+    response.getWriter().write("""
+                {
+                    "success": false,
+                    "message": "Account is disabled",
+                    "data": null,
+                    "errors": null,
+                    "timestamp": "%s"
+                }
+                """.formatted(timestamp));
   }
 }
